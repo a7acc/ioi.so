@@ -49,6 +49,11 @@
     let list = [];
     let idx = 0;
 
+    // 檢查是否含有漢字 (一-龯區段)
+    function hasKanji(text) {
+      return /[一-龯]/.test(text);
+    }
+
     async function loadPhrases() {
       try {
         const res = await fetch('./phrases.json');
@@ -80,14 +85,19 @@
       errorEl.textContent = '';
       translationEl.style.visibility = 'hidden';
       translationEl.textContent = '';
-      if (list.length > 0) {
-        const entry = list[idx];
-        const jpText = entry.jp;
-        // 使用 ruby 標籤在漢字上方顯示平假名
-        const reading = Array.isArray(entry.seg) ? entry.seg[0].text : jpText;
+      if (!list.length) {
+        phraseEl.textContent = '此場合尚無句子';
+        return;
+      }
+      const entry = list[idx];
+      const jpText = entry.jp;
+      // 若含漢字，使用 ruby 標示平假名
+      if (hasKanji(jpText) && Array.isArray(entry.seg)) {
+        const reading = entry.seg.map(s=>s.text).join('');
         phraseEl.innerHTML = `<ruby><rb>${jpText}</rb><rt>${reading}</rt></ruby>`;
       } else {
-        phraseEl.textContent = '此場合尚無句子';
+        // 無漢字或無 seg，直接顯示
+        phraseEl.textContent = jpText;
       }
     }
 
