@@ -7,6 +7,10 @@
   <style>
     body { font-family: sans-serif; text-align: center; padding: 2em; }
     #phrase { font-size: 2em; margin: 1.5em 0; }
+    #phrase .segment { display: inline-block; }
+    #phrase .segment span { margin: 0 0.2em; }
+    #phrase .segment .H { color: #d00; }
+    #phrase .segment .L { color: #00f; }
     #translation { font-size: 1.5em; color: #555; min-height: 1.2em; margin-top: 0.5em; visibility: hidden; }
     #error { color: red; margin-top: 1em; white-space: pre-wrap; }
     button, select { font-size: 1em; padding: 0.5em 1em; margin: 0 0.3em; }
@@ -14,21 +18,31 @@
 </head>
 <body>
   <h1>毎日の日本語フレーズ</h1>
-  <label for="category">選擇場合：</label>
-  <select id="category"></select>
+  <div>
+    <label for="category">場合：</label>
+    <select id="category"></select>
+    <label for="voiceSelect">語音：</label>
+    <select id="voiceSelect"></select>
+  </div>
+
   <div id="phrase">載入中…</div>
   <div id="translation"></div>
   <div id="error"></div>
 
-  <button id="speakBtn">🔊 發音</button>
-  <button id="showCnBtn">繁體中文</button>
-  <button id="nextBtn">▶️ 下一句</button>
+  <div>
+    <button id="prevBtn">◀️ 上一句</button>
+    <button id="speakBtn">🔊 發音</button>
+    <button id="showCnBtn">繁體中文</button>
+    <button id="nextBtn">▶️ 下一句</button>
+  </div>
 
   <script>
     const categoryEl    = document.getElementById('category');
+    const voiceSelect   = document.getElementById('voiceSelect');
     const phraseEl      = document.getElementById('phrase');
     const translationEl = document.getElementById('translation');
     const errorEl       = document.getElementById('error');
+    const prevBtn       = document.getElementById('prevBtn');
     const speakBtn      = document.getElementById('speakBtn');
     const showCnBtn     = document.getElementById('showCnBtn');
     const nextBtn       = document.getElementById('nextBtn');
@@ -42,7 +56,6 @@
         const res = await fetch('./phrases.json');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         data = await res.json();
-        // 填充下拉選單
         Object.keys(data).forEach(key => {
           const opt = document.createElement('option');
           opt.value = key;
@@ -50,7 +63,6 @@
           categoryEl.appendChild(opt);
         });
         categoryEl.addEventListener('change', changeCategory);
-        // 默認選第一個
         categoryEl.selectedIndex = 0;
         changeCategory();
       } catch (e) {
@@ -71,30 +83,54 @@
       translationEl.style.visibility = 'hidden';
       translationEl.textContent = '';
       if (list.length > 0) {
-        phraseEl.textContent = list[idx].jp;
+        const entry = list[idx];
+        if (Array.isArray(entry.seg)) {
+          const html = entry.seg.map(s => `<span class="${s.pitch}">${s.text}</span>`).join('');
+          phraseEl.innerHTML = `<span class="segment">${html}</span>`;
+        } else {
+          phraseEl.textContent = entry.jp;
+        }
       } else {
         phraseEl.textContent = '此場合尚無句子';
       }
     }
 
     function nextPhrase() {
-      if (list.length === 0) return;
+      if (!list.length) return;
       idx = (idx + 1) % list.length;
       showPhrase();
     }
 
+    function prevPhrase() {
+      if (!list.length) return;
+      idx = (idx - 1 + list.length) % list.length;
+      showPhrase();
+    }
+
+    function populateVoices() {
+      const voices = speechSynthesis.getVoices().filter(v => v.lang.startsWith('ja')).slice(0,5);
+      voiceSelect.innerHTML = '';
+      voices.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v.name;
+        opt.textContent = v.name;
+        voiceSelect.appendChild(opt);
+      });
+    }
+
     function speakPhrase() {
-      if (list.length === 0) return;
+      if (!list.length) return;
       const text = list[idx].jp;
       const utt = new SpeechSynthesisUtterance(text);
       utt.lang = 'ja-JP';
-      const voice = speechSynthesis.getVoices().find(v => v.lang.startsWith('ja'));
-      if (voice) utt.voice = voice;
+      const voices = speechSynthesis.getVoices();
+      const selected = voiceSelect.value;
+      utt.voice = voices.find(v => v.name === selected) || voices.find(v => v.lang.startsWith('ja'));
       speechSynthesis.speak(utt);
     }
 
     function showTranslation() {
-      if (list.length === 0) return;
+      if (!list.length) return;
       translationEl.textContent = list[idx].tw;
       translationEl.style.visibility = 'visible';
     }
@@ -102,18 +138,19 @@
       translationEl.style.visibility = 'hidden';
     }
 
+    prevBtn.addEventListener('click', prevPhrase);
     nextBtn.addEventListener('click', nextPhrase);
     speakBtn.addEventListener('click', speakPhrase);
     showCnBtn.addEventListener('mousedown', showTranslation);
-    showCnBtn.addEventListener('mouseup',   hideTranslation);
-    showCnBtn.addEventListener('mouseleave',hideTranslation);
-    showCnBtn.addEventListener('touchstart',showTranslation);
-    showCnBtn.addEventListener('touchend',  hideTranslation);
+    showCnBtn.addEventListener('mouseup', hideTranslation);
+    showCnBtn.addEventListener('mouseleave', hideTranslation);
+    showCnBtn.addEventListener('touchstart', showTranslation);
+    showCnBtn.addEventListener('touchend', hideTranslation);
 
-    if (speechSynthesis.onvoiceschanged !== undefined) {
-      speechSynthesis.onvoiceschanged = () => {};
+    if ('onvoiceschanged' in speechSynthesis) {
+      speechSynthesis.onvoiceschanged = populateVoices;
     }
-
+    populateVoices();
     loadPhrases();
   </script>
 </body>
