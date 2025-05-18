@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>日文常用語練習（動態載入）</title>
+  <!--
+    注意：請透過 HTTP 伺服器或 GitHub Pages 執行本檔，
+    並確保 API 支援 CORS，否則需使用代理以避免被阻擋。
+  -->
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 2em; }
+    #phrase { font-size: 2em; margin: 1.5em 0; }
+    #translation { font-size: 1.5em; color: #555; min-height: 1.2em; margin-top: 0.5em; visibility: hidden; }
+    #error { color: red; margin-top: 1em; white-space: pre-wrap; }
+    button { font-size: 1em; padding: 0.5em 1em; margin: 0 0.3em; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>毎日の日本語フレーズ</h1>
+  <div id="phrase">載入中…</div>
+  <div id="translation"></div>
+  <div id="error"></div>
+
+  <button id="speakBtn">🔊 發音</button>
+  <button id="showCnBtn">繁體中文</button>
+  <button id="nextBtn">▶️ 下一句</button>
+
+  <script>
+    const phraseEl      = document.getElementById("phrase");
+    const translationEl = document.getElementById("translation");
+    const errorEl       = document.getElementById("error");
+    const speakBtn      = document.getElementById("speakBtn");
+    const showCnBtn     = document.getElementById("showCnBtn");
+    const nextBtn       = document.getElementById("nextBtn");
+
+    let currentPhrase = "";
+    let currentTrans  = null;
+    // 靜態備援句子
+    const staticPhrases = [
+      "こんにちは", "おはようございます", "こんばんは",
+      "ありがとうございます", "すみません", "いただきます"
+    ];
+    let fallbackIndex = 0;
+
+    // 嘗試直接 fetch，再使用 AllOrigins 代理
+    async function fetchRandomPhrase() {
+      const endpoint = 'https://tatoeba-scraper.herokuapp.com/random/?lang=jpn';
+      try {
+        // 1. 直接請求
+        let res = await fetch(endpoint);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        let data = await res.json();
+        const item = Array.isArray(data) ? data[0]
+                     : (data.sentences ? data.sentences[0] : data);
+        return item.text || '';
+      } catch (e) {
+        console.warn('直接載入失敗:', e.message);
+        // 2. 代理請求
+        try {
+          const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(endpoint);
+          let res2 = await fetch(proxyUrl);
+          if (!res2.ok) throw new Error(`代理 HTTP ${res2.status}`);
+          let data2 = await res2.json();
+          const item2 = Array.isArray(data2) ? data2[0]
+                       : (data2.sentences ? data2.sentences[0] : data2);
+          return item2.text || '';
+        } catch (e2) {
+          console.error('代理載入失敗:', e2.message);
+          errorEl.textContent = `無法載入網路句子: ${e2.message}\n將使用內建範例。`;
+          const text = staticPhrases[fallbackIndex % staticPhrases.length];
+          fallbackIndex++;
+          return text;
+        }
+      }
+    }
+
+    async function showPhrase() {
+      errorEl.textContent = '';
+      currentTrans = null;
+      translationEl.style.visibility = 'hidden';
+      translationEl.textContent = '';
+      phraseEl.textContent = '載入中…';
+      currentPhrase = await fetchRandomPhrase();
+      phraseEl.textContent = currentPhrase;
+    }
+
+    function speakPhrase() {
+      const utt = new SpeechSynthesisUtterance(currentPhrase);
+      utt.lang = 'ja-JP';
+      const voice = speechSynthesis.getVoices().find(v => v.lang.startsWith('ja'));
+      if (voice) utt.voice = voice;
+      speechSynthesis.speak(utt);
+    }
+
+    async function fetchTranslation() {
+      try {
+        const url = 'https://api.mymemory.translated.net/get'
+                  + '?q=' + encodeURIComponent(currentPhrase)
+                  + '&langpair=ja|zh-TW';
+        const res = await fetch(url);
+        const js  = await res.json();
+        return js.responseData?.translatedText || '翻譯失敗';
+      } catch (e) {
+        console.error('翻譯請求失敗:', e.message);
+        errorEl.textContent = `翻譯請求失敗: ${e.message}`;
+        return '翻譯失敗';
+      }
+    }
+
+    async function showTranslation() {
+      if (currentTrans === null) {
+        translationEl.textContent = '翻譯中…';
+        currentTrans = await fetchTranslation();
+      }
+      translationEl.textContent = currentTrans;
+      translationEl.style.visibility = 'visible';
+    }
+    function hideTranslation() {
+      translationEl.style.visibility = 'hidden';
+    }
+
+    nextBtn.addEventListener('click', showPhrase);
+    speakBtn.addEventListener('click', speakPhrase);
+
+    showCnBtn.addEventListener('mousedown', showTranslation);
+    showCnBtn.addEventListener('mouseup',   hideTranslation);
+    showCnBtn.addEventListener('mouseleave',hideTranslation);
+    showCnBtn.addEventListener('touchstart',showTranslation);
+    showCnBtn.addEventListener('touchend',  hideTranslation);
+
+    if (speechSynthesis.onvoiceschanged !== undefined) {
+      speechSynthesis.onvoiceschanged = () => {};
+    }
+    showPhrase();
+  </script>
+</body>
+</html>
