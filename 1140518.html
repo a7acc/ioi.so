@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>日文常用語練習（動態載入）</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 2em;
+    }
+    #phrase {
+      font-size: 2em;
+      margin: 1.5em 0;
+    }
+    #translation {
+      font-size: 1.5em;
+      color: #555;
+      min-height: 1.2em;
+      margin-top: 0.5em;
+      visibility: hidden;
+    }
+    button {
+      font-size: 1em;
+      padding: 0.5em 1em;
+      margin: 0 0.3em;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>毎日の日本語フレーズ</h1>
+  <div id="phrase">載入中…</div>
+  <div id="translation"></div>
+
+  <button id="speakBtn">🔊 發音</button>
+  <button id="showCnBtn">🇨🇳 顯示中文</button>
+  <button id="nextBtn">▶️ 下一句</button>
+
+  <script>
+    const phraseEl      = document.getElementById("phrase");
+    const translationEl = document.getElementById("translation");
+    const speakBtn      = document.getElementById("speakBtn");
+    const showCnBtn     = document.getElementById("showCnBtn");
+    const nextBtn       = document.getElementById("nextBtn");
+
+    let currentPhrase = "";      // 當前日文句子
+    let currentTrans  = null;    // 當前中文翻譯（null 表示尚未取得）
+
+    // 取隨機日文句子
+    async function fetchRandomPhrase() {
+      try {
+        const res = await fetch(
+          "https://tatoeba-scraper.herokuapp.com/random/?lang=jpn"
+        );
+        const data = await res.json();
+        // 若 API 回一筆 object，可能為 data.sentences[0] 或 data[0]，此處嘗試兼容
+        const item = Array.isArray(data) ? data[0]
+                     : (data.sentences ? data.sentences[0] : data);
+        return item.text || "";
+      } catch (e) {
+        console.error(e);
+        return "載入失敗，請稍後再試。";
+      }
+    }
+
+    // 顯示新句子
+    async function showPhrase() {
+      currentTrans = null;
+      translationEl.style.visibility = "hidden";
+      translationEl.textContent = "";
+
+      phraseEl.textContent = "載入中…";
+      const text = await fetchRandomPhrase();
+      currentPhrase = text;
+      phraseEl.textContent = text;
+    }
+
+    // 語音朗讀
+    function speakPhrase() {
+      const utt = new SpeechSynthesisUtterance(currentPhrase);
+      utt.lang = "ja-JP";
+      const voice = speechSynthesis.getVoices()
+                     .find(v => v.lang.startsWith("ja"));
+      if (voice) utt.voice = voice;
+      speechSynthesis.speak(utt);
+    }
+
+    // 取中文翻譯（MyMemory API）
+    async function fetchTranslation() {
+      const url = "https://api.mymemory.translated.net/get"
+                + "?q=" + encodeURIComponent(currentPhrase)
+                + "&langpair=ja|zh-TW";
+      try {
+        const res = await fetch(url);
+        const js  = await res.json();
+        // 主翻譯結果通常在 responseData.translatedText
+        return js.responseData?.translatedText || "翻譯失敗";
+      } catch (e) {
+        console.error(e);
+        return "翻譯失敗";
+      }
+    }
+
+    // 顯示瀏覽時即時翻譯
+    async function showTranslation() {
+      if (currentTrans === null) {
+        translationEl.textContent = "翻譯中…";
+        currentTrans = await fetchTranslation();
+      }
+      translationEl.textContent = currentTrans;
+      translationEl.style.visibility = "visible";
+    }
+
+    function hideTranslation() {
+      translationEl.style.visibility = "hidden";
+    }
+
+    // 綁定事件
+    nextBtn.addEventListener("click", showPhrase);
+    speakBtn.addEventListener("click", speakPhrase);
+
+    showCnBtn.addEventListener("mousedown", showTranslation);
+    showCnBtn.addEventListener("mouseup",   hideTranslation);
+    showCnBtn.addEventListener("mouseleave",hideTranslation);
+    showCnBtn.addEventListener("touchstart",showTranslation);
+    showCnBtn.addEventListener("touchend",  hideTranslation);
+
+    // 初始載入
+    if (speechSynthesis.onvoiceschanged !== undefined) {
+      speechSynthesis.onvoiceschanged = () => {};
+    }
+    showPhrase();
+  </script>
+
+</body>
+</html>
