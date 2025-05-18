@@ -5,8 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>日文常用語練習（動態載入）</title>
   <!--
-    注意：請透過 HTTP 伺服器或 GitHub Pages 執行本檔，
-    並確保 API 支援 CORS，否則需使用代理以避免被阻擋。
+    注意：部署於 GitHub Pages 時，需透過 AllOrigins 代理以解決 CORS 限制。
   -->
   <style>
     body { font-family: sans-serif; text-align: center; padding: 2em; }
@@ -36,42 +35,30 @@
 
     let currentPhrase = "";
     let currentTrans  = null;
-    // 靜態備援句子
     const staticPhrases = [
       "こんにちは", "おはようございます", "こんばんは",
       "ありがとうございます", "すみません", "いただきます"
     ];
     let fallbackIndex = 0;
 
-    // 嘗試直接 fetch，再使用 AllOrigins 代理
+    // 透過 AllOrigins 代理抓取並解析 JSON
     async function fetchRandomPhrase() {
       const endpoint = 'https://tatoeba-scraper.herokuapp.com/random/?lang=jpn';
       try {
-        // 1. 直接請求
-        let res = await fetch(endpoint);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        let data = await res.json();
+        const proxyUrl = 'https://api.allorigins.win/get?url=' + encodeURIComponent(endpoint);
+        const proxyRes = await fetch(proxyUrl);
+        if (!proxyRes.ok) throw new Error(`Proxy HTTP ${proxyRes.status}`);
+        const proxyData = await proxyRes.json();
+        const data = JSON.parse(proxyData.contents);
         const item = Array.isArray(data) ? data[0]
                      : (data.sentences ? data.sentences[0] : data);
         return item.text || '';
       } catch (e) {
-        console.warn('直接載入失敗:', e.message);
-        // 2. 代理請求
-        try {
-          const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(endpoint);
-          let res2 = await fetch(proxyUrl);
-          if (!res2.ok) throw new Error(`代理 HTTP ${res2.status}`);
-          let data2 = await res2.json();
-          const item2 = Array.isArray(data2) ? data2[0]
-                       : (data2.sentences ? data2.sentences[0] : data2);
-          return item2.text || '';
-        } catch (e2) {
-          console.error('代理載入失敗:', e2.message);
-          errorEl.textContent = `無法載入網路句子: ${e2.message}\n將使用內建範例。`;
-          const text = staticPhrases[fallbackIndex % staticPhrases.length];
-          fallbackIndex++;
-          return text;
-        }
+        console.error('載入網路句子失敗:', e.message);
+        errorEl.textContent = `載入網路句子失敗: ${e.message}\n使用內建範例。`;
+        const text = staticPhrases[fallbackIndex % staticPhrases.length];
+        fallbackIndex++;
+        return text;
       }
     }
 
