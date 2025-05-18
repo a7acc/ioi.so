@@ -3,20 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>日文常用語練習（動態載入）</title>
-  <!--
-    注意：部署於 GitHub Pages 時，需透過 AllOrigins 代理以解決 CORS 限制。
-  -->
+  <title>日文常用語練習</title>
   <style>
     body { font-family: sans-serif; text-align: center; padding: 2em; }
     #phrase { font-size: 2em; margin: 1.5em 0; }
     #translation { font-size: 1.5em; color: #555; min-height: 1.2em; margin-top: 0.5em; visibility: hidden; }
     #error { color: red; margin-top: 1em; white-space: pre-wrap; }
-    button { font-size: 1em; padding: 0.5em 1em; margin: 0 0.3em; cursor: pointer; }
+    button, select { font-size: 1em; padding: 0.5em 1em; margin: 0 0.3em; }
   </style>
 </head>
 <body>
   <h1>毎日の日本語フレーズ</h1>
+  <label for="category">選擇場合：</label>
+  <select id="category"></select>
   <div id="phrase">載入中…</div>
   <div id="translation"></div>
   <div id="error"></div>
@@ -26,90 +25,85 @@
   <button id="nextBtn">▶️ 下一句</button>
 
   <script>
-    const phraseEl      = document.getElementById("phrase");
-    const translationEl = document.getElementById("translation");
-    const errorEl       = document.getElementById("error");
-    const speakBtn      = document.getElementById("speakBtn");
-    const showCnBtn     = document.getElementById("showCnBtn");
-    const nextBtn       = document.getElementById("nextBtn");
+    const categoryEl    = document.getElementById('category');
+    const phraseEl      = document.getElementById('phrase');
+    const translationEl = document.getElementById('translation');
+    const errorEl       = document.getElementById('error');
+    const speakBtn      = document.getElementById('speakBtn');
+    const showCnBtn     = document.getElementById('showCnBtn');
+    const nextBtn       = document.getElementById('nextBtn');
 
-    let currentPhrase = "";
-    let currentTrans  = null;
-    const staticPhrases = [
-      "こんにちは", "おはようございます", "こんばんは",
-      "ありがとうございます", "すみません", "いただきます"
-    ];
-    let fallbackIndex = 0;
+    let data = {};
+    let list = [];
+    let idx = 0;
 
-    // 透過 AllOrigins 代理抓取並解析 JSON
-    async function fetchRandomPhrase() {
-      const endpoint = 'https://tatoeba-scraper.herokuapp.com/random/?lang=jpn';
+    async function loadPhrases() {
       try {
-        const proxyUrl = 'https://api.allorigins.win/get?url=' + encodeURIComponent(endpoint);
-        const proxyRes = await fetch(proxyUrl);
-        if (!proxyRes.ok) throw new Error(`Proxy HTTP ${proxyRes.status}`);
-        const proxyData = await proxyRes.json();
-        const data = JSON.parse(proxyData.contents);
-        const item = Array.isArray(data) ? data[0]
-                     : (data.sentences ? data.sentences[0] : data);
-        return item.text || '';
+        const res = await fetch('./phrases.json');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        data = await res.json();
+        // 填充下拉選單
+        Object.keys(data).forEach(key => {
+          const opt = document.createElement('option');
+          opt.value = key;
+          opt.textContent = key;
+          categoryEl.appendChild(opt);
+        });
+        categoryEl.addEventListener('change', changeCategory);
+        // 默認選第一個
+        categoryEl.selectedIndex = 0;
+        changeCategory();
       } catch (e) {
-        console.error('載入網路句子失敗:', e.message);
-        errorEl.textContent = `載入網路句子失敗: ${e.message}\n使用內建範例。`;
-        const text = staticPhrases[fallbackIndex % staticPhrases.length];
-        fallbackIndex++;
-        return text;
+        console.error('載入本機句子失敗:', e.message);
+        errorEl.textContent = `載入本機句子失敗: ${e.message}`;
       }
     }
 
-    async function showPhrase() {
+    function changeCategory() {
+      const cat = categoryEl.value;
+      list = data[cat] || [];
+      idx = 0;
+      showPhrase();
+    }
+
+    function showPhrase() {
       errorEl.textContent = '';
-      currentTrans = null;
       translationEl.style.visibility = 'hidden';
       translationEl.textContent = '';
-      phraseEl.textContent = '載入中…';
-      currentPhrase = await fetchRandomPhrase();
-      phraseEl.textContent = currentPhrase;
+      if (list.length > 0) {
+        phraseEl.textContent = list[idx].jp;
+      } else {
+        phraseEl.textContent = '此場合尚無句子';
+      }
+    }
+
+    function nextPhrase() {
+      if (list.length === 0) return;
+      idx = (idx + 1) % list.length;
+      showPhrase();
     }
 
     function speakPhrase() {
-      const utt = new SpeechSynthesisUtterance(currentPhrase);
+      if (list.length === 0) return;
+      const text = list[idx].jp;
+      const utt = new SpeechSynthesisUtterance(text);
       utt.lang = 'ja-JP';
       const voice = speechSynthesis.getVoices().find(v => v.lang.startsWith('ja'));
       if (voice) utt.voice = voice;
       speechSynthesis.speak(utt);
     }
 
-    async function fetchTranslation() {
-      try {
-        const url = 'https://api.mymemory.translated.net/get'
-                  + '?q=' + encodeURIComponent(currentPhrase)
-                  + '&langpair=ja|zh-TW';
-        const res = await fetch(url);
-        const js  = await res.json();
-        return js.responseData?.translatedText || '翻譯失敗';
-      } catch (e) {
-        console.error('翻譯請求失敗:', e.message);
-        errorEl.textContent = `翻譯請求失敗: ${e.message}`;
-        return '翻譯失敗';
-      }
-    }
-
-    async function showTranslation() {
-      if (currentTrans === null) {
-        translationEl.textContent = '翻譯中…';
-        currentTrans = await fetchTranslation();
-      }
-      translationEl.textContent = currentTrans;
+    function showTranslation() {
+      if (list.length === 0) return;
+      translationEl.textContent = list[idx].tw;
       translationEl.style.visibility = 'visible';
     }
     function hideTranslation() {
       translationEl.style.visibility = 'hidden';
     }
 
-    nextBtn.addEventListener('click', showPhrase);
+    nextBtn.addEventListener('click', nextPhrase);
     speakBtn.addEventListener('click', speakPhrase);
-
     showCnBtn.addEventListener('mousedown', showTranslation);
     showCnBtn.addEventListener('mouseup',   hideTranslation);
     showCnBtn.addEventListener('mouseleave',hideTranslation);
@@ -119,7 +113,8 @@
     if (speechSynthesis.onvoiceschanged !== undefined) {
       speechSynthesis.onvoiceschanged = () => {};
     }
-    showPhrase();
+
+    loadPhrases();
   </script>
 </body>
 </html>
