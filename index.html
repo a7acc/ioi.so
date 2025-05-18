@@ -49,11 +49,6 @@
     let list = [];
     let idx = 0;
 
-    // 檢查是否含有漢字 (一-龯區段)
-    function hasKanji(text) {
-      return /[一-龯]/.test(text);
-    }
-
     async function loadPhrases() {
       try {
         const res = await fetch('./phrases.json');
@@ -75,8 +70,7 @@
     }
 
     function changeCategory() {
-      const cat = categoryEl.value;
-      list = data[cat] || [];
+      list = data[categoryEl.value] || [];
       idx = 0;
       showPhrase();
     }
@@ -90,14 +84,17 @@
         return;
       }
       const entry = list[idx];
-      const jpText = entry.jp;
-      // 若含漢字，使用 ruby 標示平假名
-      if (hasKanji(jpText) && Array.isArray(entry.seg)) {
-        const reading = entry.seg.map(s=>s.text).join('');
-        phraseEl.innerHTML = `<ruby><rb>${jpText}</rb><rt>${reading}</rt></ruby>`;
+      if (entry.seg && Array.isArray(entry.seg)) {
+        // 組合各 segment，僅對含 reading 的 segment 用 ruby
+        phraseEl.innerHTML = entry.seg.map(seg => {
+          if (seg.reading) {
+            return `<ruby><rb>${seg.text}</rb><rt>${seg.reading}</rt></ruby>`;
+          } else {
+            return seg.text;
+          }
+        }).join('');
       } else {
-        // 無漢字或無 seg，直接顯示
-        phraseEl.textContent = jpText;
+        phraseEl.textContent = entry.jp;
       }
     }
 
@@ -125,21 +122,20 @@
     }
 
     function speakPhrase() {
-      if (!list.length) return;
-      const text = list[idx].jp;
+      const entry = list[idx];
+      const text = entry.jp;
       const utt = new SpeechSynthesisUtterance(text);
       utt.lang = 'ja-JP';
       const voices = speechSynthesis.getVoices();
-      const selected = voiceSelect.value;
-      utt.voice = voices.find(v => v.name === selected) || voices.find(v => v.lang.startsWith('ja'));
+      utt.voice = voices.find(v => v.name === voiceSelect.value) || voices.find(v => v.lang.startsWith('ja'));
       speechSynthesis.speak(utt);
     }
 
     function showTranslation() {
-      if (!list.length) return;
       translationEl.textContent = list[idx].tw;
       translationEl.style.visibility = 'visible';
     }
+
     function hideTranslation() {
       translationEl.style.visibility = 'hidden';
     }
