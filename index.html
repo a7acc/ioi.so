@@ -7,10 +7,8 @@
   <style>
     body { font-family: sans-serif; text-align: center; padding: 2em; }
     #phrase { font-size: 2em; margin: 1.5em 0; }
-    #phrase .segment { display: inline-block; }
-    #phrase .segment span { margin: 0 0.2em; }
-    #phrase .segment .H { color: #d00; }
-    #phrase .segment .L { color: #00f; }
+    ruby { ruby-position: over; }
+    rt { font-size: 0.6em; color: #555; }
     #translation { font-size: 1.5em; color: #555; min-height: 1.2em; margin-top: 0.5em; visibility: hidden; }
     #error { color: red; margin-top: 1em; white-space: pre-wrap; }
     button, select { font-size: 1em; padding: 0.5em 1em; margin: 0 0.3em; }
@@ -84,12 +82,10 @@
       translationEl.textContent = '';
       if (list.length > 0) {
         const entry = list[idx];
-        if (Array.isArray(entry.seg)) {
-          const html = entry.seg.map(s => `<span class="${s.pitch}">${s.text}</span>`).join('');
-          phraseEl.innerHTML = `<span class="segment">${html}</span>`;
-        } else {
-          phraseEl.textContent = entry.jp;
-        }
+        const jpText = entry.jp;
+        // 使用 ruby 標籤在漢字上方顯示平假名
+        const reading = Array.isArray(entry.seg) ? entry.seg[0].text : jpText;
+        phraseEl.innerHTML = `<ruby><rb>${jpText}</rb><rt>${reading}</rt></ruby>`;
       } else {
         phraseEl.textContent = '此場合尚無句子';
       }
